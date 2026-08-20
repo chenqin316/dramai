@@ -471,204 +471,113 @@ function normalizeShot(
 function normalizeTimeline(
   value: unknown,
   durationSec: number,
-): StoryboardDraft['timeline'] {
-  /**
-   * 如果完全没有 timeline，
-   * 自动生成一个覆盖全程的兜底时间轴。
-   */
-  if (
-    !Array.isArray(value) ||
-    value.length === 0
-  ) {
-    return [
-      {
-        start_sec: 0,
-        end_sec: durationSec,
-        action:
-          '保持自然、清晰、适合儿童教育视频的角色动作。',
-      },
-    ]
+): NonNullable<StoryboardDraft['timeline']> {
+  type TimelineItem = {
+    start_sec: number
+    end_sec: number
+    action: string
+    dialogue?: string
   }
 
-  const items = value
-    .map((item) => {
-      if (
-        !item ||
-        typeof item !== 'object'
-      ) {
-        return null
-      }
+  const fallback: TimelineItem[] = [
+    {
+      start_sec: 0,
+      end_sec: durationSec,
+      action:
+        '保持自然、清晰、适合儿童教育视频的角色动作。',
+    },
+  ]
 
-      const obj =
-        item as Record<string, unknown>
+  if (!Array.isArray(value) || value.length === 0) {
+    return fallback
+  }
 
-      /**
-       * 兼容：
-       *
-       * start_sec
-       * startSec
-       */
-      const start =
-        typeof obj.start_sec === 'number'
-          ? obj.start_sec
-          : typeof obj.startSec === 'number'
-            ? obj.startSec
-            : null
+  const items: TimelineItem[] = []
 
-      /**
-       * 兼容：
-       *
-       * end_sec
-       * endSec
-       */
-      const end =
-        typeof obj.end_sec === 'number'
-          ? obj.end_sec
-          : typeof obj.endSec === 'number'
-            ? obj.endSec
-            : null
+  for (const item of value) {
+    if (!item || typeof item !== 'object') {
+      continue
+    }
 
-      const action =
-        typeof obj.action === 'string'
-          ? obj.action.trim()
-          : ''
+    const obj = item as Record<string, unknown>
 
-      const dialogue =
-        typeof obj.dialogue === 'string'
-          ? obj.dialogue.trim()
-          : undefined
+    const startRaw =
+      typeof obj.start_sec === 'number'
+        ? obj.start_sec
+        : typeof obj.startSec === 'number'
+          ? obj.startSec
+          : null
 
-      /**
-       * 基础字段错误，
-       * 直接忽略该 timeline。
-       */
-      if (
-        start === null ||
-        end === null ||
-        !action ||
-        !Number.isFinite(start) ||
-        !Number.isFinite(end)
-      ) {
-        return null
-      }
+    const endRaw =
+      typeof obj.end_sec === 'number'
+        ? obj.end_sec
+        : typeof obj.endSec === 'number'
+          ? obj.endSec
+          : null
 
-      return {
-        /**
-         * 时间不能小于 0。
-         */
-        start_sec: Math.max(
-          0,
-          Math.floor(start),
-        ),
+    const action =
+      typeof obj.action === 'string'
+        ? obj.action.trim()
+        : ''
 
-        /**
-         * 时间不能超过视频总时长。
-         */
-        end_sec: Math.min(
-          durationSec,
-          Math.floor(end),
-        ),
+    const dialogue =
+      typeof obj.dialogue === 'string'
+        ? obj.dialogue.trim()
+        : undefined
 
-        action,
+    if (
+      startRaw === null ||
+      endRaw === null ||
+      !Number.isFinite(startRaw) ||
+      !Number.isFinite(endRaw) ||
+      !action
+    ) {
+      continue
+    }
 
-        dialogue:
-          dialogue &&
-          dialogue.length > 0
-            ? dialogue
-            : undefined,
-      }
+    items.push({
+      start_sec: Math.max(0, Math.floor(startRaw)),
+      end_sec: Math.min(
+        durationSec,
+        Math.floor(endRaw),
+      ),
+      action,
+      dialogue:
+        dialogue && dialogue.length > 0
+          ? dialogue
+          : undefined,
     })
-    .filter(
-      (
-        item,
-      ): item is StoryboardDraft['timeline'][number] =>
-        item !== null,
-    )
-
-  /**
-   * 如果全部 timeline 都无效，
-   * 返回兜底时间轴。
-   */
-  if (items.length === 0) {
-    return [
-      {
-        start_sec: 0,
-        end_sec: durationSec,
-        action:
-          '保持自然、清晰、适合儿童教育视频的角色动作。',
-      },
-    ]
   }
 
-  /**
-   * 按开始时间排序。
-   */
+  if (items.length === 0) {
+    return fallback
+  }
+
   items.sort(
-    (a, b) =>
-      a.start_sec - b.start_sec,
+    (a, b) => a.start_sec - b.start_sec,
   )
 
-  /**
-   * 第一段必须从 0 秒开始。
-   */
-  items[0].start_sec = 0
+  items[0]!.start_sec = 0
 
-  /**
-   * 自动让所有片段连续。
-   */
-  for (
-    let i = 1;
-    i < items.length;
-    i++
-  ) {
-    /**
-     * 当前段从上一段结束时间开始。
-     */
-    items[i].start_sec =
-      items[i - 1].end_sec
+  for (let i = 1; i < items.length; i++) {
+    const previous = items[i - 1]!
+    const current = items[i]!
 
-    /**
-     * 如果当前结束时间
-     * 小于等于开始时间，
-     * 至少保证 1 秒。
-     */
-    if (
-      items[i].end_sec <=
-      items[i].start_sec
-    ) {
-      items[i].end_sec =
-        Math.min(
-          durationSec,
-          items[i].start_sec + 1,
-        )
+    current.start_sec = previous.end_sec
+
+    if (current.end_sec <= current.start_sec) {
+      current.end_sec = Math.min(
+        durationSec,
+        current.start_sec + 1,
+      )
     }
   }
 
-  /**
-   * 最后一段必须结束于视频结束。
-   */
-  items[
-    items.length - 1
-  ].end_sec = durationSec
+  items[items.length - 1]!.end_sec =
+    durationSec
 
   return items
 }
-
-/**
- * 删除 Markdown 代码围栏。
- *
- * 支持：
- *
- * ```json
- * {...}
- * ```
- *
- * 或：
- *
- * ```
- * {...}
- * ```
- */
 function stripCodeFence(
   text: string,
 ): string {
