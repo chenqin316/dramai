@@ -104,20 +104,98 @@ export interface CameraParams {
   speed?: CameraSpeed
 }
 
+export interface StoryboardTimelineItem {
+  /** 当前动作开始时间，单位：秒。 */
+  startSec: number
+
+  /** 当前动作结束时间，单位：秒。 */
+  endSec: number
+
+  /** 该时间段内的具体动作描述。 */
+  action: string
+
+  /** 该时间段内的对白；没有对白则为空。 */
+  dialogue?: string
+}
+
 export interface Storyboard {
   id: string
   projectId: string
   sequence: number
+
+  /** 当前镜头的画面描述。 */
   sceneText: string
+
+  /** 当前镜头的旁白。 */
   narration?: string
+
+  /** 原始文生图提示词。 */
   imagePrompt?: string
+
   /** 出场角色的 character.id 列表。 */
   characterIds: string[]
+
+  /**
+   * 当前 Veo 视频镜头的总时长。
+   * Veo 3.1 单次视频最长按 8 秒处理。
+   */
   durationSec?: number
+
+  /**
+   * 当前镜头的时间轴。
+   *
+   * 例如：
+   * 0–2 秒：展示棕熊
+   * 2–5 秒：询问孩子
+   * 5–8 秒：等待孩子回答
+   */
+  timeline?: StoryboardTimelineItem[]
+
+  /**
+   * 给 Veo 的镜头规则。
+   *
+   * 例如：
+   * Locked fixed camera.
+   * No zoom.
+   * No pan.
+   * No camera movement.
+   */
+  camera?: string
+
+  /**
+   * 第一帧规则。
+   *
+   * 用户绑定的图片是该视频的 EXACT FIRST FRAME。
+   */
+  firstFrameRule?: string
+
+  /**
+   * 最后一帧规则。
+   *
+   * 用于要求重要角色和物体在视频结束时保持正确状态。
+   */
+  finalFrameRule?: string
+
+  /**
+   * 自动组装出的 Veo 3.1 Prompt。
+   *
+   * 这个字段只是缓存，用户修改分镜后可以重新生成。
+   */
+  veoPrompt?: string
+
+  /**
+   * 用户绑定的已经生成好的图片。
+   *
+   * 这张图片不是 AI 重新生成的，而是用户选择作为
+   * 当前 Veo 视频的参考图 / 第一帧。
+   */
   imageAssetId?: string
+
   videoAssetId?: string
+
   /** 运镜参数。v0.3 起；旧分镜没有则按 static 处理。 */
   cameraParams?: CameraParams
+
   /**
    * 异步视频任务句柄，用于刷新页面后恢复轮询。
    * 任务结束后清空。
@@ -127,6 +205,7 @@ export interface Storyboard {
     apiFlavor: ApiFlavor
     submittedAt: number
   }
+
   status: 'pending' | 'image-ready' | 'video-ready' | 'failed'
 }
 
